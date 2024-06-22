@@ -24,9 +24,6 @@
 #define P2 0x11ULL
 #define SP 0x12ULL
 
-// Technically a register identifier, but it's the current memory address. Recommend only using for returning to a memory address after jumping.
-#define $ 0xFFULL
-
 #define NOP 0b0000000000000000000000000000000000000000000000000000000000000000ULL
 
 // Load an immediate value into a general-purpose register

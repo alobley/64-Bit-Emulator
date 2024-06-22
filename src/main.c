@@ -2,6 +2,9 @@
  * Developer: xWatexx
  * Version: Alpha 2
  * 
+ * Change Log:
+ * 06/14/2024   Alpha 1
+ * 06/22/2024   Alpha 2
  */
 
 #include <stdio.h>
@@ -313,10 +316,6 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
             if(DR1 <= R16){
                 memory[SPtr] = registers[DR1];
                 SPtr++;
-            }else if(DR1 == $){
-                // Allows for call (push $)
-                memory[SPtr] = PC;
-                SPtr++;
             }else{
                 printf("Invalid register in PUSH instruction!\n");
             }
@@ -325,10 +324,6 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
             // Registers only
             if(DR1 <= R16){
                 registers[DR1] = memory[SPtr];
-                SPtr--;
-            }else if(DR1 == $){
-                // Allows for ret (pop $)
-                PC = memory[SPtr];
                 SPtr--;
             }else{
                 printf("Invalid register in POP instruction!\n");
