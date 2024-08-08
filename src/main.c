@@ -5,6 +5,7 @@
  * Change Log:
  * 06/14/2024   Alpha 1
  * 06/22/2024   Alpha 2
+ * 08/07/2022   Alpha 3
  */
 
 #include <stdio.h>
@@ -13,6 +14,10 @@
 #include "lib/instructions.h"
 #include "lib/ports.h"
 #include <SDL2/SDL.h>
+#include <signal.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <time.h>
 
 uint64* memory;
 
@@ -31,24 +36,11 @@ uint64 SPtr = 0;
 bool FLAGS[4];
 
 #pragma region timer
-bool timerEvent = false;
-SDL_TimerID timer;
+uint64 tickReg = 0;
 
-uint64 PITCallback(uint32 interval, void* param){
-    // Timer event occurred
-    *((bool*)param) = true;
-
-    // Return the interval to continue the timer
+uint32 timer_handler(uint32 interval, void *param){
+    tickReg++;
     return interval;
-}
-
-uint64 ReadPIT(){
-    timerEvent = false;
-    return true;
-}
-
-void WritePIT(uint64 value){
-    timer = SDL_AddTimer(value, PITCallback, &timerEvent);
 }
 
 #pragma endregion
@@ -56,13 +48,18 @@ void WritePIT(uint64 value){
 #pragma region graphics
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
+SDL_Texture* texture;
 
 void InitSDL(){
+    SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO);
+
     // Actual resolution is 320x180, but it is upscaled tp 720p for better viewing.
-    window = SDL_CreateWindow("Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 320, 180, SDL_WINDOW_SHOWN);
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    timer = SDL_AddTimer(1, PITCallback, &timerEvent);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 320, 180);
 }
 
 void DrawPixel(uint64 x, uint64 y, uint32 color){
@@ -84,14 +81,14 @@ void DrawPixel(uint64 x, uint64 y, uint32 color){
 
     SDL_RenderFillRect(renderer, &r);
 }
+
+
 uint32* startPtr;
 void UpdateScreen(){
-    for(int i = 0; i < 180; i++){
-        for(int j = 0; j < 320; j++){
-            uint32* intptr = startPtr + (i * 320) + j;
-            DrawPixel(j * 4, i * 4, *intptr);
-        }
-    }
+    uint32* framebuffer = startPtr;
+    SDL_UpdateTexture(texture, NULL, framebuffer, 320 * sizeof(uint32));
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
 }
 
@@ -108,7 +105,10 @@ bool jmpinstruction = false;
 uint64 keyboardInput = 0;
 
 uint64 ProcessInput(uint64 port){
-    if(port = PORT_KBD_READ){
+    if(port == PORT_PIT_GET){
+        return (uint64)tickReg;
+    }
+    if(port == PORT_KBD_READ){
         return (uint64)keyboardInput;
     }
     printf("No valid port!\n");
@@ -146,7 +146,7 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
             }
             return;
         case LDP:
-            if(DR1 == P1 || DR1 == P2 && DR2 <= R16){
+            if((DR1 == P1 || DR1 == P2 || DR1 == SP) && DR2 <= R16){
                 if(DR1 == P1){
                     Ptr1 = registers[DR2];
                 }else if(DR1 == P2){
@@ -160,11 +160,13 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
             return;
         case GEP:
             // (gpreg, ptr)
-            if(DR2 == P1 || DR2 == P2 && DR1 <= R16){
+            if((DR2 == P1 || DR2 == P2 || DR1 == SP) && DR1 <= R16){
                 if(DR2 == P1){
                     registers[DR1] = Ptr1;
-                }else{
+                }else if(DR2 == P2){
                     registers[DR1] = Ptr2;
+                }else{
+                    registers[DR1] = SPtr;
                 }
             }else{
                 printf("Invalid register(s) in GEP instruction!\n");
@@ -173,9 +175,9 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
         case ADD:
             if(DR1 <= R16 && DR2 <= R16){
                 registers[DR1] += registers[DR2];
-                if(registers[DR1] + registers[DR2] > ULONG_MAX){
-                    FLAGS[3] = true;
-                }
+                //if(registers[DR1] + registers[DR2] > ULONG_MAX){
+                //    FLAGS[3] = true;
+                //}
             }else{
                 printf("Invalid register(s) in ADD instruction!\n");
             }
@@ -186,6 +188,9 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
                 if(registers[DR1] - registers[DR2] < 0){
                     FLAGS[2] = true;
                 }
+                if(registers[DR1] == 0){
+                    FLAGS[1] = true;
+                }
             }else{
                 printf("Invalid register(s) in SUB instruction!\n");
             }
@@ -193,9 +198,6 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
         case MUL:
             if(DR1 <= R16 && DR2 <= R16){
                 registers[DR1] *= registers[DR2];
-                if(registers[DR1] * registers[DR2] > ULONG_MAX){
-                    FLAGS[3] = true;
-                }
             }else{
                 printf("Invalid register(s) in MUL instruction!\n");
             }
@@ -315,7 +317,7 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
             // Registers only
             if(DR1 <= R16){
                 memory[SPtr] = registers[DR1];
-                SPtr++;
+                SPtr--;
             }else{
                 printf("Invalid register in PUSH instruction!\n");
             }
@@ -323,8 +325,8 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
         case POP:
             // Registers only
             if(DR1 <= R16){
+                SPtr++;                         // Fuck this line of code in particular. Two hours of my life.
                 registers[DR1] = memory[SPtr];
-                SPtr--;
             }else{
                 printf("Invalid register in POP instruction!\n");
             }
@@ -376,24 +378,38 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
         case DEC:
             if(DR1 <= R16){
                 registers[DR1]--;
+                if(registers[DR1] == 0){
+                    FLAGS[1] = true;
+                }
             }else{
                 printf("Invalid register(s) in DEC instruction!\n");
             }
             return;
         case IN:
             // port, register
-            if(DR2 <= R16){
-                registers[DR2] = ProcessInput(DR1);
+            if(DR1 <= R16){
+                registers[DR1] = ProcessInput(DR2);
             }else{
                 printf("Invalid register in IN instruction\n");
             }
             return;
         case OUT:
-            if(DR2 <= R16){
-                ProcessOutput(DR1, registers[DR2]);
+            if(DR1 <= R16){
+                ProcessOutput(DR2, registers[DR1]);
             }else{
                 printf("Invalid register in OUT instruction\n");
             }
+            return;
+        case CALL:
+            memory[SPtr] = PC;
+            SPtr--;
+            PC = DR1;
+            jmpinstruction = true;
+            //printf("%llu\n", memory[PC + 3]);
+            return;
+        case RET:
+            SPtr++;
+            PC = memory[SPtr];
             return;
     }
     printf("Invalid instruction at address %lli!\n", PC);
@@ -402,10 +418,13 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
 
 void PrintDbg(uint64* memory){
     for(int i = 0; i < 16; i++){
-        printf("R%d: %lli\n", i+1, registers[i]);
+        printf("R%d: %llu\n", i+1, registers[i]);
     }
-    printf("P1: %lli\n", Ptr1);
-    printf("P2: %lli\n", Ptr2);
+    printf("P1: %llu\n", Ptr1);
+    printf("P2: %llu\n", Ptr2);
+    printf("SP: %llu\n", SPtr);
+
+    printf("Timer value: %llu\n", tickReg);
 }
 
 void ExecuteProgram(){
@@ -414,7 +433,7 @@ void ExecuteProgram(){
     uint64 instructionsExecuted = 0;
     while(true){
         ProcessInstruction(memory[PC], memory[PC+1], memory[PC+2]);
-        if(jmpinstruction == false){
+        if(!jmpinstruction){
             PC += 3;
         }
         jmpinstruction = false;
@@ -444,22 +463,25 @@ void LoadProgram(uint64* ROM, uint64 length){
 
 
 // TODO:
-// 1. Add I/O instruction (done)
-// 2. Add a PIT (done)
-// 3. (optional) at some point, add instructions for moving different data sizes to and from memory, rather than just dwords and qwords.
-// 4. Create an assembler (most likely in Python)
-// 5. Create a simple game to confirm the computer is good to use
-// 6. Implement call/ret either as an assembler macro or as specific instructions
-// 7. Add an FPU (maybe)
-// 8. (Potentially) add interrupts (may be a bad idea)
-// 9. Create virtual graphics hardware instead of a framebuffer, and hopefully go for HD with text mode support. Alternatively, I could try to add PCI support
+// - Add I/O instruction (done)
+// - Add a PIT (done)
+// - (optional) at some point, add instructions for moving different data sizes to and from memory, rather than just dwords and qwords.
+// - Create an assembler (done)
+// - Redefine the instructions as hex code values
+// - Implement call/ret as specific instructions
+// - Create a simple game to confirm the computer is good to use
+// - Add a dq directive in the assembler for reserving qwords in program files.
+// - Add an FPU (maybe)
+// - (Potentially) add interrupts (may be a bad idea)
+// - Create virtual graphics hardware instead of a framebuffer, and hopefully go for HD with text mode support. Alternatively, I could try to add PCI support
 //    for using something like VMware SVGA or other virtual VGA hardware.
-// 10. Add a virtual disk connector for storing programs on a virtual hard disk
-// 11. Create a BIOS
-// 12. If interrupts were created, create a PIC
-// 13. Create a simple CLI OS like DOS
-// 14. (optional) Create a custom local machine only update of Clang or GCC that can compile C code to this architecture
-// 15. Name the architecture of the CPU and the GPU
+// - Add a virtual disk connector for storing programs on a virtual hard disk
+// - Create a BIOS
+// - If interrupts were created, create a PIC
+// - Create a simple CLI OS like DOS
+// - (optional) Create a custom local machine only update of Clang or GCC that can compile C code to this architecture
+// - Name the architecture of the CPU and the GPU
+// - Networking support???
 
 #define DWORD_BUFFER_START 124961600
 
@@ -492,6 +514,12 @@ int main(int argc, char *argv[]){
     startPtr = (uint32*)memory + 124961600;
 
     InitSDL();
+    SDL_TimerID timerID = SDL_AddTimer(1, timer_handler, NULL);
+    if (timerID == 0) {
+        printf("SDL_AddTimer Error: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
 
     uint64 romLen = fileSize / sizeof(uint64);
 

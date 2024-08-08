@@ -1,23 +1,14 @@
 import struct
-import re
+import argparse
 
 # All the instructions that can be assembled
-instructions = { "NOP": 0b0000000000000000000000000000000000000000000000000000000000000000, "LDI": 0b0000000000000000000000000000000000000000000000000000000000000001,
-                 "CPY": 0b0000000000000000000000000000000000000000000000000000000000000010, "LDP": 0b0000000000000000000000000000000000000000000000000000000000000011,
-                 "GEP": 0b0000000000000000000000000000000000000000000000000000000000010110, "ADD": 0b0000000000000000000000000000000000000000000000000000000000000100,
-                 "SUB": 0b0000000000000000000000000000000000000000000000000000000000000101, "MUL": 0b0000000000000000000000000000000000000000000000000000000000000110,
-                 "DIV": 0b0000000000000000000000000000000000000000000000000000000000000111, "OR": 0b0000000000000000000000000000000000000000000000000000000000001000,
-                 "XOR": 0b0000000000000000000000000000000000000000000000000000000000001001, "AND": 0b0000000000000000000000000000000000000000000000000000000000001010,
-                 "NOT": 0b0000000000000000000000000000000000000000000000000000000000001011, "SHL": 0b0000000000000000000000000000000000000000000000000000000000001100,
-                 "SHR": 0b0000000000000000000000000000000000000000000000000000000000001101, "JMP": 0b0000000000000000000000000000000000000000000000000000000000001110,
-                 "BRE": 0b0000000000000000000000000000000000000000000000000000000000001111, "BNE": 0b0000000000000000000000000000000000000000000000000000000000010000,
-                 "BRZ": 0b0000000000000000000000000000000000000000000000000000000000010001, "BNZ": 0b0000000000000000000000000000000000000000000000000000000000010010,
-                 "LOAD": 0b0000000000000000000000000000000000000000000000000000000000010011, "STOR": 0b0000000000000000000000000000000000000000000000000000000000010100,
-                 "CLF": 0b0000000000000000000000000000000000000000000000000000000000010101, "PUSH": 0b0000000000000000000000000000000000000000000000000000000000010111,
-                 "POP": 0b0000000000000000000000000000000000000000000000000000000000011000, "CMP": 0b0000000000000000000000000000000000000000000000000000000000011001,
-                 "GOTO": 0b0000000000000000000000000000000000000000000000000000000000011010, "STOD": 0b0000000000000000000000000000000000000000000000000000000000011011,
-                 "INC": 0b0000000000000000000000000000000000000000000000000000000000011100, "DEC": 0b0000000000000000000000000000000000000000000000000000000000011101,
-                 "IN": 0b0000000000000000000000000000000000000000000000000000000000011110, "OUT": 0b0000000000000000000000000000000000000000000000000000000000011111 }
+instructions = { "NOP": 0x0000000000000000, "LDI": 0x0000000000000001, "CPY": 0x0000000000000002, "LDP": 0x0000000000000003, "GEP": 0x0000000000000004, "ADD": 0x0000000000000005,
+                 "SUB": 0x0000000000000006, "MUL": 0x0000000000000007, "DIV": 0x0000000000000008, "OR": 0x0000000000000009, "XOR": 0x000000000000000A,
+                 "AND": 0x000000000000000B, "NOT": 0x000000000000000C, "SHL": 0x000000000000000D, "SHR": 0x000000000000000E, "INC": 0x000000000000000F,
+                 "DEC": 0x0000000000000010, "JMP": 0x0000000000000011, "BRE": 0x0000000000000012, "BNE": 0x0000000000000013, "BRZ": 0x0000000000000014,
+                 "BNZ": 0x0000000000000015, "GOTO": 0x0000000000000016, "CALL": 0x0000000000000017, "RET": 0x0000000000000018, "CMP": 0x0000000000000019,
+                 "LOAD": 0x000000000000001A, "STOR": 0x000000000000001B, "PUSH": 0x000000000000001C, "POP": 0x000000000000001D, "STOD": 0x000000000000001E,
+                 "CLF": 0x000000000000001F, "IN": 0x0000000000000020, "OUT": 0x0000000000000021 }
 
 # The numerical IDs of all the registers
 registerIDs = { "R1": 0x00, "R2": 0x01, "R3": 0x02, "R4": 0x03, "R5": 0x04, "R6": 0x05, "R7": 0x06, "R8": 0x07, "R9": 0x08, "R10": 0x09, "R11": 0x0A,
@@ -104,8 +95,10 @@ def GetLabels(lines):
         if line and line[-1] == ":":
             labels[line[:-1]] = offset + org
 
-        elif line and not line.split(" ")[0] in macros and not line.split()[1] in constants and not line.split(" ")[0] == "ORG":
+        elif line and not line.split(" ")[0] in macros and not line.split(" ")[0] == "ORG" and not line.split(" ")[0] == "%DEFINE":
             offset += 3
+
+    print(str(labels))
     offset = 0
 
 # Gets all the macros in the program. Unfinished.
@@ -143,13 +136,10 @@ def GetConstants(lines):
         if line.split(" ")[0] == "%DEFINE":
             if line.split(" ")[2].isnumeric():
                 constVal = int(line.split(" ")[2])
-                print(str(constVal))
             elif IsHex(line.split(" ")[2]):
                 constVal = HexToInt(line.split(" ")[2])
-                print(str(constVal))
             elif IsBinary(line.split(" ")[2]):
                 constVal = BinToInt(line.split(" ")[2])
-                print(str(constVal))
 
             constants[line.split(" ")[1]] = constVal
 
@@ -205,6 +195,8 @@ def ParseInstruction(line):
                 operand1 = registerIDs[line.split(" ")[1][:-1]]
             elif line.split(" ")[1][:-1] in labels:
                 operand1 = labels[line.split(" ")[1][:-1]]
+            elif line.split(" ")[1][:-1].startswith("'") and line.split(" ")[1][:-1].endswith("'") and len(line.split(" ")[1][:-1]) == 3:
+                operand1 = ord(line.split(" ")[1][1].lower())
 
 
             if line.split(" ")[2].isnumeric():
@@ -219,6 +211,8 @@ def ParseInstruction(line):
                 operand2 = registerIDs[line.split(" ")[2]]
             elif line.split(" ")[2] in labels:
                 operand2 = labels[line.split(" ")[2]]
+            elif line.split(" ")[2].startswith("'") and line.split(" ")[2].endswith("'") and len(line.split(" ")[2]) == 3:
+                operand2 = ord(line.split(" ")[2][1].lower())
 
 
         elif len(line.split(" ")) > 1:
@@ -234,6 +228,9 @@ def ParseInstruction(line):
                 operand1 = registerIDs[line.split(" ")[1]]
             elif line.split(" ")[1] in labels:
                 operand1 = labels[line.split(" ")[1]]
+            elif line.split(" ")[1].startswith("'") and line.split(" ")[1].endswith("'") and len(line.split(" ")[1]) == 3:
+                # Everything in quotation marks will be made lowercase. Add the nececarry amount to it in order to make the letter capital.
+                operand1 = ord(line.split(" ")[1][1].lower())
 
             operand2 = 0
         else:
@@ -241,14 +238,22 @@ def ParseInstruction(line):
             operand2 = 0
 
     if line:
+        #print(str(opcode), str(operand1), str(operand2))
         assembledCode.append(AssembleInstruction(opcode, operand1, operand2))
         memoryOffset += 3
 
 
 # The main function
 def main():
-    inFileName = input("Enter the name of your asm file: ")
-    outFileName = input("Enter the name of your assembled code: ")
+    # Get the args passed when executing the program for the name of the input file and the name of the output file, in that order.
+    parser = argparse.ArgumentParser(description="This is the assembler for my custom CPU architecture.")
+    parser.add_argument('input_file', type=str, help='The input file name')
+    parser.add_argument('output_file', type=str, help='The output file name')
+
+    args = parser.parse_args()
+
+    inFileName = args.input_file
+    outFileName = args.output_file
 
     with open(inFileName, 'r') as assemblyFile:
         inputString = assemblyFile.read()
@@ -266,4 +271,5 @@ def main():
         for i in range(len(assembledCode)):
             binary_file.write(assembledCode[i])
 
-main()
+if __name__ == '__main__':
+    main()
