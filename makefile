@@ -12,5 +12,4 @@ run:
 	build/main bin/$(ASMFILE).bin
 
 clean: 
-	rm -rf build/*
 	rm -rf bin/*

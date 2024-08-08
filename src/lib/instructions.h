@@ -1,22 +1,6 @@
 #ifndef INSTRUCTIONS_H
 #define INSTRUCTIONS_H
 
-// The general-purpose registers
-#define R1 0x00ULL
-#define R2 0x01ULL
-#define R3 0x02ULL
-#define R4 0x03ULL
-#define R5 0x04ULL
-#define R6 0x05ULL
-#define R7 0x06ULL
-#define R8 0x07ULL
-#define R9 0x08ULL
-#define R10 0x09ULL
-#define R11 0x0AULL
-#define R12 0x0BULL
-#define R13 0x0CULL
-#define R14 0x0DULL
-#define R15 0x0EULL
 #define R16 0x0FULL
 
 // The pointer registers

@@ -13,11 +13,18 @@
 #include "lib/types.h"
 #include "lib/instructions.h"
 #include "lib/ports.h"
-#include <SDL2/SDL.h>
 #include <signal.h>
+#include <time.h>
+
+#ifdef Linux
+#include <SDL2/SDL.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <time.h>
+#endif
+
+#ifdef _WIN64
+#include <SDL.h>
+#endif
 
 uint64* memory;
 
@@ -416,6 +423,7 @@ void ProcessInstruction(uint64 instruction, uint64 operand1, uint64 operand2){
 }  
 #pragma endregion
 
+#pragma region execution
 void PrintDbg(uint64* memory){
     for(int i = 0; i < 16; i++){
         printf("R%d: %llu\n", i+1, registers[i]);
@@ -461,25 +469,27 @@ void LoadProgram(uint64* ROM, uint64 length){
     }
 }
 
+#pragma endregion
+
 
 // TODO:
 // - Add I/O instruction (done)
 // - Add a PIT (done)
 // - (optional) at some point, add instructions for moving different data sizes to and from memory, rather than just dwords and qwords.
 // - Create an assembler (done)
-// - Redefine the instructions as hex code values
-// - Implement call/ret as specific instructions
+// - Redefine the instructions as hex code values (done)
+// - Implement call/ret as specific instructions (done)
 // - Create a simple game to confirm the computer is good to use
 // - Add a dq directive in the assembler for reserving qwords in program files.
 // - Add an FPU (maybe)
-// - (Potentially) add interrupts (may be a bad idea)
+// - (Potentially) add interrupts (may be a bad idea) - actually important
 // - Create virtual graphics hardware instead of a framebuffer, and hopefully go for HD with text mode support. Alternatively, I could try to add PCI support
 //    for using something like VMware SVGA or other virtual VGA hardware.
 // - Add a virtual disk connector for storing programs on a virtual hard disk
-// - Create a BIOS
+// - Create a BIOS (maybe)
 // - If interrupts were created, create a PIC
 // - Create a simple CLI OS like DOS
-// - (optional) Create a custom local machine only update of Clang or GCC that can compile C code to this architecture
+// - (optional) Create a custom local machine only update of Clang or GCC or TCC that can compile C code to this architecture
 // - Name the architecture of the CPU and the GPU
 // - Networking support???
 

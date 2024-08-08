@@ -98,7 +98,7 @@ def GetLabels(lines):
         elif line and not line.split(" ")[0] in macros and not line.split(" ")[0] == "ORG" and not line.split(" ")[0] == "%DEFINE":
             offset += 3
 
-    print(str(labels))
+    #print(str(labels))
     offset = 0
 
 # Gets all the macros in the program. Unfinished.
